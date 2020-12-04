@@ -8,6 +8,7 @@ from model_utils import Choices
 from model_utils.fields import StatusField
 from sortedm2m.fields import SortedManyToManyField
 from swapper import get_model_name
+from django.core.exceptions import PermissionDenied
 
 from .. import settings as app_settings
 from ..signals import config_modified, config_status_changed
@@ -113,13 +114,11 @@ class AbstractConfig(BaseConfig):
         return cls.templates.rel.model
 
     @classmethod
-    def get_templates_from_pk_set(cls, action, pk_set):
+    def _get_templates_from_pk_set(cls, pk_set):
         """
         Retrieves templates from pk_set
         Called in ``clean_templates``, may be reused in third party apps
         """
-        if action != 'pre_add':
-            return False
         # coming from signal
         if isinstance(pk_set, set):
             template_model = cls.get_template_model()
@@ -198,9 +197,9 @@ class AbstractConfig(BaseConfig):
 
     @classmethod
     def clean_templates_org(cls, action, instance, pk_set, **kwargs):
-        templates = cls.get_templates_from_pk_set(action, pk_set)
-        if not templates:
-            return templates
+        if action != 'pre_add':
+            return False
+        templates = cls._get_templates_from_pk_set(pk_set)
         # when using the admin, templates will be a list
         # we need to get the queryset from this list in order to proceed
         if not isinstance(templates, models.QuerySet):
@@ -228,6 +227,27 @@ class AbstractConfig(BaseConfig):
         # return valid templates in order to save computation
         # in the following operations
         return templates
+
+    @classmethod
+    def enforce_required_template(cls, action, instance, pk_set, **kwargs):
+        """
+        This method is called from a django signal (m2m_changed),
+        see config.apps.ConfigConfig.connect_signals.
+        It raises a ValidationError if a required template
+        is unassigned from a config
+        """
+        # raise PermissionDenied(
+        #     _('Required templates cannot be removed from the configuration')
+        # )
+        print(f'yo! action: {action}')
+        if action not in ['pre_remove']:
+            return False
+        # import pdb; pdb.set_trace()
+        templates = cls._get_templates_from_pk_set(pk_set)
+        if templates.filter(required=True).exists():
+            raise PermissionDenied(
+                _('Required templates cannot be removed from the configuration')
+            )
 
     def get_default_templates(self):
         """

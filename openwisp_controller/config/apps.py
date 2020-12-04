@@ -30,6 +30,7 @@ class ConfigConfig(AppConfig):
 
     def __setmodels__(self):
         self.config_model = load_model('config', 'Config')
+        self.template_model = load_model('config', 'Template')
         self.vpnclient_model = load_model('config', 'VpnClient')
 
     def connect_signals(self):
@@ -50,6 +51,11 @@ class ConfigConfig(AppConfig):
             self.config_model.templates_changed,
             sender=self.config_model.templates.through,
             dispatch_uid='config.templates_changed',
+        )
+        m2m_changed.connect(
+            self.config_model.enforce_required_template,
+            sender=self.config_model.templates.through,
+            dispatch_uid='template.enforce_required_template',
         )
         m2m_changed.connect(
             self.config_model.manage_vpn_clients,

@@ -1,6 +1,6 @@
 import uuid
 from unittest import mock
-
+from django.core.exceptions import PermissionDenied
 from celery.exceptions import SoftTimeLimitExceeded
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -379,6 +379,21 @@ class TestTemplate(
         t = self._create_template(default_values={'test': 'value'})
         system_context = t.get_system_context()
         self.assertNotIn('test', system_context.keys())
+
+    def test_required_template(self):
+        t = self._create_template(required=True)
+
+        with self.subTest('required makes it also default'):
+            self.assertTrue(t.default)
+
+        with self.subTest('removing it from a device raises error'):
+            config = self._create_config(
+                device=self._create_device(name='test-required')
+            )
+            self.assertTrue(config.templates.filter(pk=t.pk).exists())
+            with self.assertRaises(PermissionDenied) as context:
+                config.templates.remove(t)
+            self.assertIn('Required templates', str(context.exception))
 
 
 class TestTemplateTransaction(
